@@ -419,8 +419,7 @@ Inputs `/submit` refuses are logged the same way, with their own reason
 <!-- Every attack with its outcome and a held-or-broke mark.
      `run_attacks.py --label before` produces the table. -->
 
-<!-- DRAFT: the verdicts are PROPOSED by Claude. Held or broke is my call:
-     check each one against my thresholds before keeping it. -->
+
 
 `python run_attacks.py --set attack_set --url http://127.0.0.1:5050 --label before`,
 56 attacks, 2026-11-17. Full output: `results/attack_run_2026-11-17_2158_before.md`.

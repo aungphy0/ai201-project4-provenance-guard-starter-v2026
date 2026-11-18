@@ -36,38 +36,56 @@
 
 ## What This Does
 
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
-<!-- MILESTONE 1 SCAFFOLD (Claude-generated guide; delete this comment once
-     you've written your steps). Where each hop lives in the code, so your
-     trace names real places. The sentences are yours to write.
+1. **The text arrives.** The writer sends JSON to `POST /submit` with their
+   `text` and a `creator_id`. Nothing has been judged yet, so at this point
+   they look exactly like everyone else.
 
-       arrive      app.py::submit         request.get_json -> text, creator_id
-       refuse?     app.py::submit         missing / empty / huge text -> 400?
-       signal 1    detector.py::model_signal   gpt2 perplexity -> 0-1 (high = AI)
-       signal 2    stylometry.py::style_signal sentence spread, TTR, punctuation
-       combine     scoring.py::combine_signals  two scores -> one 0-1 score
-       label       scoring.py::score_to_label   thresholds in config.py
-                                                (0.35 / 0.65 right now)
-       log         audit.py::log_decision  content_id + both scores + status
-       answer      JSON back to the writer: content_id, guess, confidence,
-                   label, model_score, style_score
-       appeal      app.py::appeal -> audit.py::log_appeal -> status under_review
+2. **Check the input.** If `text` is missing, empty or not a string, the
+   service should send back a 400 error and stop, not crash. My student's
+   paragraph is normal, so it passes. (I still need to decide what "too long"
+   means. gpt2 only reads the first 400 tokens anyway.)
 
-     For each step, say what goes in, what comes out, and what the
-     plain-writing human from detector.py's docstring looks like at that point.
-     Where do they first get hurt, and where could they still be saved? -->
+3. **Signal 1, the model score.** `detector.py` runs gpt2 on the text and
+   asks how predictable it is. Low perplexity means a higher score, meaning
+   more likely AI. **This is where my student first gets hurt.** Common words
+   in short, plain sentences are exactly what gpt2 finds easy to guess, so
+   their honest writing can score as high as real AI text.
 
-1.
-2.
-3.
-4.
-5.
-6.
-7.
+4. **Signal 2, the style score.** `stylometry.py` looks only at the shape of
+   the text: how much sentence lengths vary, how much the vocabulary repeats,
+   and punctuation. It can't read, so it doesn't care who wrote it. This could
+   go either way for my student. Short sentences of similar length and a small
+   vocabulary look "AI-like" here too. But if their sentences are uneven, this
+   is the first place they could be saved.
 
+5. **Combine the two.** `scoring.py` turns the two scores into one number
+   from 0 to 1. Right now it's a 50/50 average. If both signals are fooled,
+   my student ends up with a high combined score. If they disagree, the
+   average lands in the middle.
 
+6. **Turn it into a label, log it, and answer.** The thresholds in `config.py`
+   are 0.35 and 0.65: at 0.65 or above it says AI, at 0.35 or below it says
+   human, and anything in between is unsure. `audit.py` writes the decision to
+   the log with a `content_id` and both signal scores, and the writer gets
+   JSON back with the label, the confidence and both scores. **This is the
+   label my student actually reads.** If they land in "unsure" instead of
+   "AI", that middle band has saved them from a false accusation, so the
+   wording of the unsure label matters a lot.
+
+7. **Appeal.** If my student is labelled AI, they can send their
+   `content_id` and their reasoning to `POST /appeal`. That logs the appeal
+   next to the original decision (the log is append-only, so nothing is
+   erased) and moves it to `under_review`, where a person looks at it. **This
+   is the last place they can be saved**, and the only step where a human
+   is involved. It only helps if they know they can appeal and feel
+   confident enough to argue. A second-language writer may not.
+
+**What this trace tells me:** the harm starts at step 3 and nothing
+automatic undoes it. Steps 4 to 6 can only soften it (signal 2 disagreeing,
+or landing in the unsure band), and step 7 depends on the person who was
+wronged speaking up. The plain writer this signal is most likely to accuse is
+also the one with the least room to argue back.
 
 ---
 

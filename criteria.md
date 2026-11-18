@@ -42,63 +42,78 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. My own writing is rarely called AI
 
-<!-- Your criterion. It must name a number. -->
+Of **10 pieces I wrote myself**, **at most 1** gets the high-confidence AI
+label, in **every one of the three trials**.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 2.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** on a writing site a wrong accusation costs the writer a
+lot, and a missed AI post costs the site a little. So the false-positive
+number is the one I care about most. I allow 1 and not 0 because gpt2 scores
+plain writing as predictable, and some of my own writing is plain. 2 or more
+out of 10 would mean one in five honest writers gets accused, which I
+wouldn't ship.
 
 ---
 
-## 3.
+## 2. Plain human writing never gets the AI label
 
-<!-- Your criterion. -->
+Of **5 plainly-written human paragraphs** (short sentences, common words, the
+way my second-language student in the Milestone 1 trace writes), **0** get the
+high-confidence AI label in any of the three trials. Landing in "unsure" is
+allowed.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 4.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** my trace showed this writer gets hurt first, at signal 1,
+and has the least room to argue back. The unsure band is the only automatic
+thing that can save them, so I want the system to use it for them instead of
+accusing them. I know gpt2's blind spot makes this hard, which is why it's a
+real target and not an easy one.
 
 ---
 
-## 5.
+## 3. All three labels are reachable
 
-<!-- Your criterion. -->
+Across the three sample inputs in `samples/` (clearly AI, clearly human,
+borderline), **each of the three labels (AI / unsure / human) appears at least
+once**, in **every trial**. On top of that, the clearly AI sample's combined
+score is **at least 0.30 higher** than the clearly human sample's.
 
+**Why this target:** if one label can never be produced, my thresholds (0.35
+and 0.65) have a gap and the label is just decoration. The 0.30 gap is about
+the width of my unsure band (0.65 − 0.35). If clearly AI and clearly human
+text aren't at least that far apart, the two signals can't separate them well
+enough for the labels to mean anything.
 
+---
 
-**Why this target:**
+## 4. Bad input gets a clear error, never a crash
 
+For **4 malformed requests** (empty `text`, no `text` field, `text` set to
+null, and about 50,000 words), the service returns a **400 with a JSON
+error message** every time. That's **0 crashes (no 500s)** across all three
+trials, and the server keeps running afterwards.
 
+**Why this target:** step 2 of my trace says bad input should be stopped
+before any signal runs. A crash on a malformed input is one of the most
+common real failures. The 50,000-word case matters because gpt2 is slow and
+an enormous paste shouldn't be able to stall or break the service for
+everyone else.
+
+---
+
+## 5. Every appeal is recorded and changes the status
+
+For **5 appeals** sent against real `content_id`s, **5 of 5** return a
+confirmation, move the item's status to `under_review`, and appear in `/log`
+next to the original decision, which is still there unchanged. An appeal
+against a **made-up `content_id`** is refused with an error and **nothing**
+is written to the log.
+
+**Why this target:** in my trace, the appeal (step 7) is the last place a
+wrongly accused writer can be saved and the only step with a human in it. If
+even one appeal silently disappears, that writer has nothing. 5 of 5 because
+there's no acceptable failure rate for losing someone's appeal. I'll test this
+one by hand, since it needs a real submission first.
 
 ---
 

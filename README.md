@@ -350,7 +350,9 @@ appeal sits after it with status `under_review`.
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day (on `POST /submit`, set in
+`config.py`; rate limiting is on by default now, `AI201_RATE_LIMITS=0` turns
+it off)
 
 **Why those numbers and not others:**
 <!-- Think about two people: a real writer submitting their own work a few
@@ -358,16 +360,57 @@ appeal sits after it with status `under_review`.
      thresholds. Your numbers have to be liveable for the first and hostile to
      the second. -->
 
+A real writer submits their own work a few times an hour. Even someone fixing
+a typo and resubmitting rarely sends more than 5 in a minute, and 50 in a day
+is far more than a person posting their own writing needs. A script trying
+to map my thresholds (sending small variations of a text to find exactly
+where "unsure" turns into "AI") needs hundreds or thousands of tries. At 50 a
+day per creator, that takes weeks instead of minutes. I went lower than the
+default 10/200 because every submission runs gpt2 on my laptop, which takes
+real time, so a flood also slows the service for everyone else.
+
 **What a caller counts as:** <!-- per address, or per creator_id? They fail
 differently — one script can look like a thousand callers, and one household
 can look like one. -->
+Per `creator_id`, falling back to the caller's address if there isn't one.
+The weakness: `creator_id` is whatever the caller sends, so a script can
+invent a new one on every request and never hit the limit. One script can
+look like a thousand callers. I didn't add a per-address limit as well,
+because on my laptop every test (including the whole attack set) comes from
+the same address, `127.0.0.1`, and an address limit would block my own test
+run. For a real deployment I'd add a looser per-address limit on top, for
+example 30 a minute. The flip side of per-address is that one household or
+classroom sharing an address would look like one caller.
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
 ```
+$ python run_attacks.py --flood 15 --url http://127.0.0.1:5050
+15 submissions as 'flood_tester' against http://127.0.0.1:5050
 
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
+
+10 of 15 were rate limited.
+```
+
+Every rejection leaves a trace in the log, so a flood doesn't show up only as
+an absence:
+
+```json
+{"timestamp": "2026-11-18T05:44:00+00:00", "creator_id": "flood_tester", "event": "rejected",
+ "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+```
+
+Inputs `/submit` refuses are logged the same way, with their own reason
+(`empty_or_missing_text`, `too_short`, `too_long`, `detector_unavailable`):
+
+```json
+{"timestamp": "2026-11-18T05:44:16+00:00", "creator_id": "m1_badinput", "event": "rejected",
+ "status": "rejected", "reason": "empty_or_missing_text"}
+{"timestamp": "2026-11-18T05:44:16+00:00", "creator_id": "m1_short", "event": "rejected",
+ "status": "rejected", "reason": "too_short", "text_length": 2}
 ```
 
 ---

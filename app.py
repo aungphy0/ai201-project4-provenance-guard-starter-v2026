@@ -151,7 +151,7 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
@@ -201,14 +201,20 @@ def submit():
     """
 
    
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    # a JSON list or string isn't an object -> treat it as empty, not a 500
+    if not isinstance(payload, dict):
+        payload = {}
     # step 2 - JSON goes in: pull text and creator_id out of the body
     text = payload.get("text")
     creator_id = payload.get("creator_id", "unknown")
+    if not isinstance(creator_id, str):
+        creator_id = "unknown"
 
     # check the input BEFORE any signal runs (criterion 4).
     # missing, null, not a string, or only spaces -> 400, not a crash
     if not isinstance(text, str) or not text.strip():
+        audit.log_rejection(creator_id=creator_id, reason="empty_or_missing_text")
         return jsonify({
             "error": "bad_request",
             "message": "Send JSON with a non-empty \"text\"."
@@ -216,6 +222,7 @@ def submit():
 
     # an enormous paste would make gpt2 slow for everyone -> refuse it
     if len(text) > config.MAX_TEXT_CHARS:
+        audit.log_rejection(creator_id=creator_id, reason="too_long", text_length=len(text))
         return jsonify({
             "error": "too_long",
             "message": f"Text is {len(text)} characters. The limit is {config.MAX_TEXT_CHARS}."
@@ -227,9 +234,11 @@ def submit():
     try:
         model_score = detector.model_signal(text)
     except detector.DetectorUnavailable as e:
+        audit.log_rejection(creator_id=creator_id, reason="detector_unavailable")
         return jsonify({"error": "detector_unavailable", "message": str(e)}), 503
     except ValueError as e:
         # gpt2 needs at least 3 tokens; "hi" would otherwise crash with a 500
+        audit.log_rejection(creator_id=creator_id, reason="too_short", text_length=len(text))
         return jsonify({"error": "too_short", "message": str(e)}), 400
 
     # step 5 - the second signal: the shape of the text (stylometry.py)
@@ -291,7 +300,10 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    # a JSON list or string isn't an object -> treat it as empty, not a 500
+    if not isinstance(payload, dict):
+        payload = {}
     content_id = payload.get("content_id")
     reasoning = payload.get("reasoning")
 

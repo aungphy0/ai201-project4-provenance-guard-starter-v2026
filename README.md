@@ -842,43 +842,110 @@ cost me one evasion.
      what you'd do, and why you stopped. -->
 
 
+After the fix, 13 of 56 attacks still break, and criterion 2 is still missed.
+They group the same way my diagnoses did.
+
+**1. Criterion 2 and FP02–FP05: careful plain writers are still labelled AI.**
+FP02 (formal report, 0.660), FP03 (non-native speaker, 0.711), FP04 (rubric
+essay, 0.717) and FP05 (technical docs, 0.659). Two of them are in criterion
+2, so it's 2 of 5 against a target of 0.
+*What I'd do:* the remaining push comes from signal one. gpt2 still scores
+these 0.80–0.83 because common, careful words are predictable, and the
+style fix can't change that. My next step would be to stop letting signal one
+alone carry a text over the AI line: give the AI label only when the
+vocabulary measure *also* points to AI (TTR above my 0.86 midpoint). All four
+sit below it (0.63–0.82), so they'd go to unsure, while the AI texts that
+are caught now (0.91–0.94) would stay AI. I'd also want a much
+bigger set of real plain human writing to set that rule on, not five texts.
+*Why I stopped:* the milestone allows one fix, and I spent it on the style
+signal. A second change to the label rule would make it impossible to tell
+which change did what. Five false-positive texts are also too few to tune a
+new rule on without overfitting to exactly those five.
+
+**2. Seven evasions still escape to "unsure" (EV01, 02, 05, 06, 07, 08, 10).**
+EV10 is new: my fix made repetition read as human, and the disagreement cap
+then holds it at 0.60.
+*What I'd do:* very little, on purpose. "Unsure" was always my answer to
+signals that disagree, and none of these reached "human". I'd rather let
+edited AI text sit in unsure than accuse plain writers. For EV10
+specifically, I'd make TTR ignore exact repeated sentences (count each
+distinct sentence once), so repetition can't buy a human score.
+*Why I stopped:* catching these means trusting a single signal when the two
+disagree, which is exactly what produces false positives (diagnosis 1). I
+chose not to make that trade.
+
+**3. PI02 and MF03: text that isn't normal prose reads as human.**
+A fake `SYSTEM:` header (PI02) and control characters (MF03) make gpt2's
+perplexity explode, and "surprising" reads as "human".
+*What I'd do:* add a check in the route before any signal runs. Refuse text
+with control characters (400), and when less than about 80% of the
+characters are ordinary letters, spaces and punctuation, return "unsure"
+instead of scoring it. That's cheap and fixes MF03 completely. PI02 is
+harder: its header is normal letters, so I'd also need to treat a very low
+model score next to a high style score as a reason for "unsure", not
+"human".
+*Why I stopped:* one fix per milestone, and these two are rare compared with
+the plain-writer false positives, which hurt real people more often.
+
+**4. My fix's midpoint rests partly on a stand-in text.** The 0.86 TTR
+midpoint averages two "human" calibration values: `clearly_human` (0.808,
+from the course) and `samples/plain_human.json` (0.773). That second one is
+a stand-in Claude wrote to imitate plain writing, not real human writing.
+*What I'd do:* replace `plain_human.json` with real plain writing, recompute
+the midpoint from real human and AI samples only, and re-run the after
+tests. Using only `clearly_human`, the midpoint would be about 0.87, so I
+don't expect the result to move much, but I haven't checked.
+*Why I stopped:* I found this while writing up, after the after-run was
+committed. Changing the number now would be a second, untested change.
+
+**5. Requests with no `creator_id` share one rate-limit bucket.** (Held, no
+crash, but noted.)
+*What I'd do:* on a real deployment, require a `creator_id` (or an account),
+key the limit on that, and add a looser per-address limit on top.
+*Why I stopped:* on my laptop every request comes from `127.0.0.1`, so I
+can't test a per-address limit without also blocking my own test run.
 
 **The trade I'd make if this ran for real:**
 
 <!-- Two sentences. Fewer wrong accusations means more AI text getting through.
      Say which way you'd go and WHO PAYS FOR IT. -->
 
-
+I'd go further toward fewer wrong accusations: no AI label unless both
+signals and the vocabulary measure agree, with everything else left as
+"unsure". The people who pay are honest writers, who compete with more AI
+text slipping through as "unsure", and that's better than making plain,
+careful and second-language writers like FP03 pay by being accused of
+cheating with the least room to argue back.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
      SUBMISSION CHECKLIST — unit 7
 
-       [ ] criteria.md has five numbered criteria, each naming a target
-       [ ] Each has a reason underneath
-       [ ] POST /submit returns content_id, guess, confidence, label,
+       [x] criteria.md has five numbered criteria, each naming a target
+       [x] Each has a reason underneath
+       [x] POST /submit returns content_id, guess, confidence, label,
            model_score and style_score
-       [ ] Two signals that measure DIFFERENT things, each with a named blind spot
-       [ ] Three label variants, all reachable, written out in full
-       [ ] POST /appeal changes status and writes to the log
-       [ ] Signals and Scoring names scoring.py::combine_signals
-       [ ] Sample Run: a submission AND an appeal, as pasted text
-       [ ] At least four new commits
-       [ ] Repository URL submitted — WRITE IT DOWN
+       [x] Two signals that measure DIFFERENT things, each with a named blind spot
+       [x] Three label variants, all reachable, written out in full
+       [x] POST /appeal changes status and writes to the log
+       [x] Signals and Scoring names scoring.py::combine_signals
+       [x] Sample Run: a submission AND an appeal, as pasted text
+       [x] At least four new commits
+       [x] Repository URL submitted — WRITE IT DOWN
 
      SUBMISSION CHECKLIST — unit 8
 
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
-       [ ] The attack set run IN FULL, every input with an outcome
-       [ ] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
-       [ ] The SAME repository URL as last unit
+       [x] Rate limiting on /submit, with your numbers justified
+       [x] The pasted run of status codes showing 429
+       [x] Audit log with all nine fields, recording rejections too
+       [x] The attack set run IN FULL, every input with an outcome
+       [x] Ten audit log entries pasted as text
+       [x] Five criteria across three trials
+       [x] A diagnosis for every miss and every broken attack — stage AND mechanism
+       [x] One improvement, with Attack Run — After
+       [x] What's Still Broken, including the production trade
+       [x] At least four new commits
+       [x] The SAME repository URL as last unit
 
      Do not delete and recreate this repository.
      ═════════════════════════════════════════════════════════════════════ -->

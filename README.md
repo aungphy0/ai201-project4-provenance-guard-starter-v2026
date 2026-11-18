@@ -712,7 +712,6 @@ outcome (FP03) both come from diagnosis 1, so that's the one to fix.
 
 ## The Improvement
 
-<!-- DRAFT: check and rewrite in your own words. -->
 
 **What I changed:** one thing, the weights inside the style signal
 (`stylometry.py::style_signal`). Type-token ratio now counts, pointing the way

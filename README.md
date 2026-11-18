@@ -712,22 +712,128 @@ outcome (FP03) both come from diagnosis 1, so that's the one to fix.
 
 ## The Improvement
 
-**What I changed:**
+<!-- DRAFT: check and rewrite in your own words. -->
 
-**Which diagnosis pointed at it:**
+**What I changed:** one thing, the weights inside the style signal
+(`stylometry.py::style_signal`). Type-token ratio now counts, pointing the way
+my data actually runs: **high vocabulary variety = more likely AI**.
+
+| | spread | punctuation | type-token ratio |
+|---|---|---|---|
+| before | 0.6 | 0.4 | 0.0 (measured, not counted) |
+| after | 0.4 | **0.2** | **0.4**, logistic with midpoint 0.86, steepness 20, neutral under 50 words |
+
+The 0.86 midpoint comes from the **Unit 7 calibration samples only**:
+halfway between the AI samples (0.915, 0.935) and the human ones (0.773,
+0.808). I didn't fit it to the attack set. A TTR weight of 0.5 scored better
+on the attack set when I tried it, but I didn't use it, because choosing a
+number *because* it passes the test would just be tuning to the test.
+Nothing else changed: same gpt2 signal, same combining rule, same thresholds.
+
+**Which diagnosis pointed at it:** diagnosis 1. Plain human writing scored
+as AI on *both* signals, and the combining rule can't help when they agree.
+Changing the rule or the thresholds couldn't fix it. The plain human texts
+scored *higher* than the real AI text (FP03 0.81, FP04 0.81 vs `clearly_ai`
+0.75), so any threshold that let them through would also let the AI text
+through. I needed a measure that actually tells them apart. Looking at all
+the texts, vocabulary variety does: the AI texts sit at 0.89–0.97, the human
+false positives at 0.63–0.82, and my own writing at 0.77–0.89. That's the
+direction I saw in Unit 7 but had switched off. Diagnosis 1 also showed that
+"no expressive punctuation" was weak evidence (all six false positives had
+none), so its weight went down.
 
 ### Attack Run — After
 
 <!-- Same format. `run_attacks.py --label after` -->
 
+`python run_attacks.py --set attack_set --url http://127.0.0.1:5050 --label after`
+→ `results/attack_run_2026-11-17_2235_after.md`. Same 56 attacks, same
+held/broke rules as before. Only the rows whose verdict changed are marked ⇄.
+Every malformed, request and flood row came back identical (11 × 400, 9 × 429,
+12 × 200), so they're summarised in the last row.
 
+| ID | Family | Before | After | Verdict before → after |
+|---|---|---|---|---|
+| EV01 | evasion | unsure 0.526 | unsure 0.519 | BROKE → BROKE |
+| EV02 | evasion | unsure 0.548 | unsure 0.521 | BROKE → BROKE |
+| EV03 | evasion | unsure 0.619 | **ai 0.681** | ⇄ BROKE → **HELD** |
+| EV04 | evasion | ai 0.749 | ai 0.743 | HELD → HELD |
+| EV05 | evasion | unsure 0.593 | unsure 0.596 | BROKE → BROKE |
+| EV06 | evasion | unsure 0.529 | unsure 0.527 | BROKE → BROKE |
+| EV07 | evasion | unsure 0.500 | unsure 0.507 | BROKE → BROKE |
+| EV08 | evasion | unsure 0.544 | unsure 0.521 | BROKE → BROKE |
+| EV09 | evasion | ai 0.706 | ai 0.726 | HELD → HELD |
+| EV10 | evasion | ai 0.874 | **unsure 0.600** | ⇄ HELD → **BROKE** |
+| FP01 | false_positive | ai 0.667 | **unsure 0.573** | ⇄ BROKE → **HELD** |
+| FP02 | false_positive | ai 0.801 | ai 0.660 | BROKE → BROKE |
+| FP03 | false_positive | ai 0.810 | ai 0.711 | BROKE → BROKE |
+| FP04 | false_positive | ai 0.811 | ai 0.717 | BROKE → BROKE |
+| FP05 | false_positive | ai 0.823 | ai 0.659 | BROKE → BROKE |
+| FP06 | false_positive | ai 0.773 | **unsure 0.600** | ⇄ BROKE → **HELD** |
+| FP07 | false_positive | unsure 0.600 | unsure 0.587 | HELD → HELD |
+| FP08 | false_positive | unsure 0.529 | unsure 0.518 | HELD → HELD |
+| PI01 | prompt_injection | unsure 0.509 | unsure 0.509 | HELD → HELD |
+| PI02 | prompt_injection | human 0.672 | human 0.663 | BROKE → BROKE |
+| PI03 | prompt_injection | unsure 0.612 | ai 0.653 | HELD → HELD (now caught outright) |
+| PI04 | prompt_injection | unsure 0.553 | unsure 0.540 | HELD → HELD |
+| PI05 | prompt_injection | unsure 0.572 | unsure 0.580 | HELD → HELD |
+| PI06 | prompt_injection | unsure 0.642 | unsure 0.552 | HELD → HELD |
+| MF01–MF08, RQ01–RQ12, FL01 | malformed / flood | as before | identical | all HELD except MF03 (still BROKE: model 0.00, labelled human) |
+
+(Score is the response's `confidence`, as in the before table.)
+
+**Totals:** broke went from **15 → 13** of 56. False positives went from
+**6 → 4**. Evasions stayed at 7, but a different 7: EV03 is now caught and
+EV10 escapes.
+
+### Run Log — After
+
+`python run_eval.py --url http://127.0.0.1:5050 --label after` →
+`results/run_2026-11-17_2236_after.md`;
+`python run_appeals.py --url http://127.0.0.1:5050 --label after` →
+`results/appeals_2026-11-17_2236_after.md`. As before, all three trials were
+identical.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Before | After |
+|---|---|---|---|---|---|---|
+| 1. My own writing rarely called AI | ≤ 1 of 10 AI | 0 of 10 (7 human, 3 unsure) | 0 of 10 | 0 of 10 | MET (0/10) | **MET** |
+| 2. Plain human never labelled AI | 0 of 5 AI | **2 of 5** (FP03 0.711, FP04 0.717) | 2 of 5 | 2 of 5 | MISSED (3/5) | **MISSED** (better) |
+| 3. All labels + gap ≥ 0.30 | each label; gap ≥ 0.30 | ai / human / unsure; 0.753 − 0.335 = 0.418 | same | same | MET (0.424) | **MET** |
+| 4. Bad input → 400, no crash | 4 of 4 | 4 × 400 | 4 × 400 | 4 × 400 | MET | **MET** |
+| 5. Every appeal recorded | 5/5 + fake refused | 5/5, 404, log +0 | same | same | MET | **MET** |
 
 **Did it help, and how do I know:**
 
 <!-- Widening the unsure band usually fixes one problem and creates another.
      Reporting that trade honestly is worth full credit. -->
 
+Partly. It helped the problem it was aimed at, but it didn't finish it, and it
+cost me one evasion.
 
+- **What got better:** two real writers are no longer accused (FP01 and FP06
+  moved to unsure), and criterion 2 went from 3 of 5 accused to 2 of 5. The
+  four that are still labelled AI all dropped a lot: FP02 0.80 → 0.66, FP05
+  0.82 → 0.66, FP03 0.81 → 0.71, FP04 0.81 → 0.72. I know it's the TTR
+  change and not noise, because gpt2's scores are identical before and after
+  (FP03's model score is 0.8051 in both), and every run is deterministic.
+  The only number that moved is the style score, and the only thing I
+  changed is the style weights. My own writing got *more* human too (7 of 10
+  human, up from 5), and AI text still gets caught: `clearly_ai` 0.753 → AI,
+  EV04 and EV09 still AI, plus EV03 and PI03 are newly caught.
+- **What it cost:** EV10, the "repeated stanza" AI text, now escapes to
+  unsure (0.874 → 0.600). Repeating lines lowers vocabulary variety (its TTR
+  is 0.50), so my new measure reads repetition as human, and its style score
+  fell from 0.77 to 0.46. gpt2 still says 0.98, so the two signals now
+  disagree by 0.52, and my disagreement cap holds the score at exactly 0.60,
+  which is unsure. Anyone who learns that can repeat phrases on purpose to
+  look human. That's a new, cheap evasion I created, through the interaction
+  of my new measure and my old rule.
+- **Why it isn't fixed:** FP03 and FP04 still get the AI label because
+  signal one hasn't changed. gpt2 still gives them 0.81 and 0.83, and their
+  vocabulary variety (0.819, 0.821) sits just under my 0.86 midpoint, so the
+  new measure only half-clears them. The writer from my Milestone 1 trace,
+  FP03, is still accused. The fix moved them closer to unsure (0.81 → 0.71)
+  but not past the 0.65 line.
 
 ---
 

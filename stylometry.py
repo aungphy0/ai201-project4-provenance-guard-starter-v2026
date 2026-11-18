@@ -30,6 +30,7 @@ anything together:
     python stylometry.py "some text to look at"
 """
 
+import math
 import re
 import statistics
 
@@ -162,6 +163,16 @@ def style_signal(text: str) -> float:
         human writer the least), so counting it would accuse plain writers.
         It's still computed and printed so I can watch it.
       - one sentence: no spread evidence -> the spread part counts as 0.5.
+
+    UNIT 8 MILESTONE 5 CHANGE (the one fix — see README "The Improvement"):
+      - type-token ratio now COUNTS, pointing the way my data shows: HIGH
+        vocabulary variety = more AI. Logistic, midpoint 0.86 (halfway between
+        the AI calibration samples, 0.915/0.935, and the human ones,
+        0.773/0.808), steepness 20. Under 50 words it's neutral (0.5), because
+        TTR on a short text is near 1.0 for everyone. Weight 0.4.
+      - punctuation weight 0.4 -> 0.2 (diagnosis 1: "no dashes or semicolons"
+        is weak evidence; all six false positives had none).
+      - spread weight 0.6 -> 0.4.
     """
     n_sentences = len(sentences(text))
     if n_sentences < 2:
@@ -173,16 +184,25 @@ def style_signal(text: str) -> float:
     punct = punctuation_density(text)
     punct_ai = 0.25 + 0.5 / (1.0 + (punct / PUNCT_MIDPOINT) ** 2)
 
-    score = WEIGHT_SPREAD * spread_ai + WEIGHT_PUNCT * punct_ai + WEIGHT_TTR * 0.5
+    if len(words(text)) < TTR_MIN_WORDS:
+        ttr_ai = 0.5
+    else:
+        ttr_ai = 1.0 / (1.0 + math.exp(-TTR_STEEPNESS * (type_token_ratio(text) - TTR_MIDPOINT)))
+
+    score = WEIGHT_SPREAD * spread_ai + WEIGHT_PUNCT * punct_ai + WEIGHT_TTR * ttr_ai
     return round(min(max(score, 0.0), 1.0), 4)
 
 
 # Tuned on the calibration inputs — see README "Signals and Scoring".
 SPREAD_MIDPOINT = 0.6    # sentence-length CV that scores 0.5
 PUNCT_MIDPOINT = 0.02    # expressive marks per word that scores 0.5
-WEIGHT_SPREAD = 0.6
-WEIGHT_PUNCT = 0.4
-WEIGHT_TTR = 0.0         # measured, not counted — it ran backwards on my data
+TTR_MIDPOINT = 0.86      # vocabulary variety that scores 0.5 (Unit 8 M5)
+TTR_STEEPNESS = 20.0
+TTR_MIN_WORDS = 50       # below this, TTR says nothing -> neutral
+# Before Unit 8 M5: spread 0.6, punct 0.4, ttr 0.0
+WEIGHT_SPREAD = 0.4
+WEIGHT_PUNCT = 0.2
+WEIGHT_TTR = 0.4         # high variety = AI, the way my calibration data ran
 
 
 if __name__ == "__main__":

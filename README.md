@@ -39,6 +39,34 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+<!-- MILESTONE 1 SCAFFOLD (Claude-generated guide; delete this comment once
+     you've written your steps). Where each hop lives in the code, so your
+     trace names real places. The sentences are yours to write.
+
+       arrive      app.py::submit         request.get_json -> text, creator_id
+       refuse?     app.py::submit         missing / empty / huge text -> 400?
+       signal 1    detector.py::model_signal   gpt2 perplexity -> 0-1 (high = AI)
+       signal 2    stylometry.py::style_signal sentence spread, TTR, punctuation
+       combine     scoring.py::combine_signals  two scores -> one 0-1 score
+       label       scoring.py::score_to_label   thresholds in config.py
+                                                (0.35 / 0.65 right now)
+       log         audit.py::log_decision  content_id + both scores + status
+       answer      JSON back to the writer: content_id, guess, confidence,
+                   label, model_score, style_score
+       appeal      app.py::appeal -> audit.py::log_appeal -> status under_review
+
+     For each step, say what goes in, what comes out, and what the
+     plain-writing human from detector.py's docstring looks like at that point.
+     Where do they first get hurt, and where could they still be saved? -->
+
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+
 
 
 ---

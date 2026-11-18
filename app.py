@@ -202,21 +202,32 @@ def submit():
 
    
     payload = request.get_json(silent=True) or {}
+    # step 2 - JSON goes in: pull text and creator_id out of the body
     text = payload.get("text")
     creator_id = payload.get("creator_id", "unknown")
-    
-    #step 3 - one real signal that we first tested from the terminal
-    # python detector.py "some text"
-    import detector
-    model_score = detector.model_signal(text)
 
-
-    # step 2 - JSON goes in: pull text and creator_id out of the body
+    # check the input BEFORE any signal runs (criterion 4).
+    # missing, null, not a string, or only spaces -> 400, not a crash
     if not isinstance(text, str) or not text.strip():
         return jsonify({
             "error": "bad_request",
             "message": "Send JSON with a non-empty \"text\"."
         }), 400
+
+    # an enormous paste would make gpt2 slow for everyone -> refuse it
+    if len(text) > config.MAX_TEXT_CHARS:
+        return jsonify({
+            "error": "too_long",
+            "message": f"Text is {len(text)} characters. The limit is {config.MAX_TEXT_CHARS}."
+        }), 400
+
+    # step 3 - one real signal that we first tested from the terminal
+    # python detector.py "some text"
+    import detector
+    try:
+        model_score = detector.model_signal(text)
+    except detector.DetectorUnavailable as e:
+        return jsonify({"error": "detector_unavailable", "message": str(e)}), 503
 
     # step 4 - log the decision. The content_id is what /appeal needs later
     content_id = f"c_{uuid.uuid4().hex[:12]}"
@@ -237,18 +248,6 @@ def submit():
         "model_score": model_score,
         "style_score": None,
     }), 200
-
-    
-    
-    # TODO: delete this and build the route.
-    return jsonify({
-        "error": "not_implemented",
-        "message": "POST /submit isn't built yet — see the TODO in app.py.",
-        "you_sent": {
-            "text_length": len(payload.get("text", "")),
-            "creator_id": payload.get("creator_id"),
-        },
-    }), 501
 
 
 @app.post("/appeal")

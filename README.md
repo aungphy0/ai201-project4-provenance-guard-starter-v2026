@@ -535,19 +535,71 @@ them is the appeal.
 
 <!-- Your five criteria across three trials. `run_eval.py --label before`. -->
 
+
+`python run_eval.py --url http://127.0.0.1:5050 --label before` →
+`results/run_2026-11-17_2226_before.md` (criteria 1–4).
+`python run_appeals.py --url http://127.0.0.1:5050 --label before` →
+`results/appeals_2026-11-17_2212_before.md` (criterion 5, which needs a
+submission before it can be appealed, so it has its own script).
+
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing rarely called AI | ≤ 1 of 10 labelled AI, every trial | 0 of 10 AI (5 human, 5 unsure) | 0 of 10 | 0 of 10 | **MET** |
+| 2. Plain human writing never labelled AI | 0 of 5 labelled AI, every trial | **3 of 5 AI** (FP01 0.667, FP03 0.810, FP04 0.811) | 3 of 5 | 3 of 5 | **MISSED** |
+| 3. All three labels reachable + gap | each label at least once; clearly-AI ≥ clearly-human + 0.30 | ai / human / unsure; gap 0.753 − 0.330 = 0.424 | same | same | **MET** |
+| 4. Bad input → clear error | 4 of 4 get a 400 with JSON, 0 crashes | 4 × 400 | 4 × 400 | 4 × 400 | **MET** |
+| 5. Every appeal recorded | 5 of 5 appeals → `under_review` and in the log; fake id refused, nothing logged | 5/5, fake → 404, log +0 | 5/5, 404, +0 | 5/5, 404, +0 | **MET** |
+
+**About the three trials:** every number came out identical in all three.
+gpt2 runs in evaluation mode with no sampling, and stylometry is plain
+arithmetic, so the same text always gets the same score on my machine. The
+repeats confirm the results are stable, but they can't show the run-to-run
+wobble the brief warns about. A pass here can't be luck, and a miss can't be
+bad luck either.
+
+**Where the test texts came from:**
+- *Criterion 1:* 10 paragraphs from my own earlier CodePath READMEs (TakeMeter,
+  Unofficial Guide, FitFindr), with markdown removed. Source of each is
+  commented in `scenarios.py`.
+- *Criterion 2:* I didn't have five plain paragraphs of my own, so I used
+  five human-written texts from the course attack set's false-positive family
+  (FP01, FP03, FP04, FP07, FP08), written by course staff. They overlap with
+  the attack run on purpose: criterion 2 is about exactly the writers that
+  family targets.
 
 **Real output from one trial**, pasted as text, naming the file and function
 that produced it:
 
-```json
+From `results/run_2026-11-17_2226_before.md`, produced by `run_eval.py::main`
+calling `app.py::submit`. This is criterion 2, trial 1, the plain-writing
+person labelled AI (FP03, a non-native speaker writing carefully):
 
+```json
+{
+  "status": 200,
+  "guess": "ai",
+  "confidence": 0.8104,
+  "model_score": 0.8051,
+  "style_score": 0.8156,
+  "combined_score": 0.8104,
+  "label": "This reads a lot like AI-generated text. Our check can be wrong, especially about simple or plain writing. If you wrote this yourself, you can ask for a person to review it.",
+  "sent": "I want to describe my experience of the first month in this country. T"
+}
+```
+
+And criterion 4, trial 1, the missing-`text` body:
+
+```json
+{
+  "status": 400,
+  "guess": null,
+  "confidence": null,
+  "model_score": null,
+  "style_score": null,
+  "combined_score": null,
+  "label": null,
+  "sent": "{\"creator_id\": \"eval_bad_missing\"}"
+}
 ```
 
 **Diagnoses**

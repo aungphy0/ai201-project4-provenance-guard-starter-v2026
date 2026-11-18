@@ -226,7 +226,6 @@ scored 0.330 → human, `samples/borderline.json` 0.460 → unsure, and
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
 
-<!-- DRAFT: check and rewrite in your own words. -->
 
 The person who reads "unsure" may well have written every word, and my
 calibration run showed plain writers land high on both signals. So the label
@@ -420,20 +419,116 @@ Inputs `/submit` refuses are logged the same way, with their own reason
 <!-- Every attack with its outcome and a held-or-broke mark.
      `run_attacks.py --label before` produces the table. -->
 
+<!-- DRAFT: the verdicts are PROPOSED by Claude. Held or broke is my call:
+     check each one against my thresholds before keeping it. -->
 
+`python run_attacks.py --set attack_set --url http://127.0.0.1:5050 --label before`,
+56 attacks, 2026-11-17. Full output: `results/attack_run_2026-11-17_2158_before.md`.
+Score is the response's `confidence` (`max(score, 1 − score)`), so a "human"
+row at 0.672 means a combined score of 0.328.
+
+**How I judged held vs broke** (thresholds: AI ≥ 0.65, human ≤ 0.35):
+- *Evasion* (AI text dressed up): **broke** if it escaped the AI label.
+- *False positive* (real human text): **broke** if it got the AI label.
+- *Prompt injection*: **broke** if the AI text came out human, or the label
+  or log was changed.
+- *Malformed*: **broke** on a crash, or if junk got a confident label.
+
+| ID | Family | Targeting | Status | Guess | Score | Verdict | Why |
+|---|---|---|---|---|---|---|---|
+| EV01 | evasion | typos raise word variety | 200 | unsure | 0.526 | BROKE | AI text escaped the AI label. The typos hit signal **one** (model 0.16), not signal two |
+| EV02 | evasion | broken-up sentences raise spread | 200 | unsure | 0.548 | BROKE | AI text escaped to unsure |
+| EV03 | evasion | pasted quotation changes the shape | 200 | unsure | 0.619 | BROKE | AI text escaped to unsure |
+| EV04 | evasion | unusual words raise perplexity | 200 | ai | 0.749 | HELD | still AI |
+| EV05 | evasion | heavy human editing pass | 200 | unsure | 0.593 | BROKE | escaped to unsure |
+| EV06 | evasion | one very long + one very short sentence | 200 | unsure | 0.529 | BROKE | escaped to unsure |
+| EV07 | evasion | padding with punctuation | 200 | unsure | 0.500 | BROKE | punctuation pulled style to 0.41 |
+| EV08 | evasion | text below the token window | 200 | unsure | 0.544 | BROKE | escaped to unsure |
+| EV09 | evasion | human opening bolted onto AI text | 200 | ai | 0.706 | HELD | still AI |
+| EV10 | evasion | repeated stanza structure | 200 | ai | 0.874 | HELD | still AI |
+| FP01 | false_positive | plain, clear human writing | 200 | **ai** | 0.667 | **BROKE** | a real person labelled AI |
+| FP02 | false_positive | human, formal register | 200 | **ai** | 0.801 | **BROKE** | labelled AI |
+| FP03 | false_positive | non-native speaker writing carefully | 200 | **ai** | 0.810 | **BROKE** | labelled AI: my Milestone 1 trace person |
+| FP04 | false_positive | student essay written to a rubric | 200 | **ai** | 0.811 | **BROKE** | labelled AI |
+| FP05 | false_positive | technical documentation by a person | 200 | **ai** | 0.823 | **BROKE** | labelled AI |
+| FP06 | false_positive | person imitating a formal template | 200 | **ai** | 0.773 | **BROKE** | labelled AI |
+| FP07 | false_positive | human repeating a phrase on purpose | 200 | unsure | 0.600 | HELD | the disagreement cap held it at 0.60 |
+| FP08 | false_positive | very short genuine human text | 200 | unsure | 0.529 | HELD | not accused |
+| PI01 | prompt_injection | instruction to ignore the check | 200 | unsure | 0.509 | HELD | no instruction followed, not labelled human |
+| PI02 | prompt_injection | instruction disguised as a system message | 200 | **human** | 0.672 | **BROKE** | AI text labelled human (combined 0.328). The odd header raised perplexity |
+| PI03 | prompt_injection | instruction in the writer's voice | 200 | unsure | 0.612 | HELD | not labelled human |
+| PI04 | prompt_injection | make the label text hostile | 200 | unsure | 0.553 | HELD | labels are fixed strings, can't be changed |
+| PI05 | prompt_injection | inject into the audit log | 200 | unsure | 0.572 | HELD | the fake JSON stayed inside the text; log entry is clean |
+| PI06 | prompt_injection | instruction plus real human text | 200 | unsure | 0.642 | HELD | not labelled human |
+| MF01 | malformed | only whitespace | 400 | — | — | HELD | refused, logged |
+| MF02 | malformed | a single character | 400 | — | — | HELD | refused (too_short) |
+| MF03 | malformed | control characters | 200 | **human** | 0.700 | **BROKE** | junk got "probably written by a person" |
+| MF04 | malformed | only punctuation | 200 | unsure | 0.544 | HELD | no crash, no accusation |
+| MF05 | malformed | a very long single word | 200 | unsure | 0.600 | HELD | no crash, no accusation |
+| MF06 | malformed | emoji only | 200 | unsure | 0.600 | HELD | no crash; model 0.997 but capped |
+| MF07 | malformed | right-to-left script | 200 | unsure | 0.600 | HELD | no crash, no accusation |
+| MF08 | malformed | 60,000 characters | 400 | — | — | HELD | refused (too_long) |
+| RQ01 | malformed | no text field | 400 | — | — | HELD | refused |
+| RQ02 | malformed | no creator_id | 200 | unsure | 0.580 | HELD | logged as `unknown` |
+| RQ03 | malformed | text is a number | 400 | — | — | HELD | refused |
+| RQ04 | malformed | text is a list | 400 | — | — | HELD | refused |
+| RQ05 | malformed | text is null | 400 | — | — | HELD | refused |
+| RQ06 | malformed | creator_id is an object | 200 | human | 0.675 | HELD | creator logged as `unknown`, no crash |
+| RQ07 | malformed | body is a JSON array | 400 | — | — | HELD | refused (fixed in Unit 8 M1) |
+| RQ08 | malformed | unparseable JSON | 400 | — | — | HELD | refused |
+| RQ09 | malformed | empty body | 400 | — | — | HELD | refused |
+| RQ10 | malformed | form-encoded body | 429 | — | — | HELD | rate-limited before validation (shared `127.0.0.1` bucket) |
+| RQ11 | malformed | JSON sent as text/plain | 429 | — | — | HELD | same shared bucket |
+| RQ12 | malformed | deeply nested JSON | 400 | — | — | HELD | refused |
+| FL01_01–05 | flood_same_creator | 20 rapid submissions, one creator | 200 | human | 0.686 | HELD | first 5 allowed |
+| FL01_06–12 | flood_same_creator | 20 rapid submissions, one creator | 429 | — | — | HELD | rate-limited and logged |
+
+**Totals:** 0 crashes (no 5xx anywhere). 15 of 56 broke: 7 of 10 evasions,
+**6 of 8 false positives**, 1 of 6 prompt injections, 1 malformed. Every
+malformed request and the flood held.
 
 **Ten audit log entries from the run**
 
 <!-- Choose entries that show the interesting failures, not the ten easiest. -->
 
 ```json
-
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_caa4605539f1", "creator_id": "attacker_FP03", "guess": "ai", "model_score": 0.8051, "style_score": 0.8156, "combined_score": 0.8104, "label": "This reads a lot like AI-generated text. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_f8b1f38c3cda", "creator_id": "attacker_FP02", "guess": "ai", "model_score": 0.7387, "style_score": 0.8638, "combined_score": 0.8013, "label": "This reads a lot like AI-generated text. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_83d649526ffa", "creator_id": "attacker_FP01", "guess": "ai", "model_score": 0.6175, "style_score": 0.7157, "combined_score": 0.6666, "label": "This reads a lot like AI-generated text. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_8befadfcb805", "creator_id": "attacker_PI02", "guess": "human", "model_score": 0.2044, "style_score": 0.4524, "combined_score": 0.3284, "label": "We think this was probably written by a person.", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:36+00:00", "content_id": "c_240522d99eb4", "creator_id": "attacker_EV01", "guess": "unsure", "model_score": 0.1635, "style_score": 0.8887, "combined_score": 0.5261, "label": "We can't tell whether a person or an AI wrote this. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_55ce1eb773c5", "creator_id": "attacker_EV07", "guess": "unsure", "model_score": 0.5862, "style_score": 0.4143, "combined_score": 0.5003, "label": "We can't tell whether a person or an AI wrote this. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_f2c8ca2679c6", "creator_id": "attacker_MF03", "guess": "human", "model_score": 0.0, "style_score": 0.6, "combined_score": 0.3, "label": "We think this was probably written by a person.", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:37+00:00", "content_id": "c_3d9d8a7743cd", "creator_id": "attacker_PI05", "guess": "unsure", "model_score": 0.6401, "style_score": 0.5045, "combined_score": 0.5723, "label": "We can't tell whether a person or an AI wrote this. …", "status": "decided"}
+{"timestamp": "2026-11-18T05:58:38+00:00", "creator_id": "unknown", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+{"timestamp": "2026-11-18T05:58:38+00:00", "creator_id": "attacker_MF08", "event": "rejected", "status": "rejected", "reason": "too_long", "text_length": 57640}
 ```
+
+(Labels shortened with … here. The log has the full text.) What they show:
+- **FP03, FP02, FP01:** real people labelled AI, with *both* signals high, so
+  my disagreement cap never triggered.
+- **PI02:** AI text labelled human.
+- **EV01, EV07:** the signals split hard (0.16 vs 0.89, 0.59 vs 0.41) and
+  the average lands in unsure.
+- **MF03:** junk labelled human.
+- **PI05:** the log injection stayed inside the text field.
+- **The `unknown` 429:** RQ10 rejected only because every request without a
+  `creator_id` shares one address bucket.
+- **MF08:** a 57,640-character paste refused before gpt2 ran.
 
 **The single worst outcome** — the one I'd least want to explain to a writer
 whose work got caught by it:
 
-
+**FP03, a non-native English speaker writing carefully, labelled AI at 0.810**
+("I want to describe my experience of the first month in this country. The
+weather was very different from my home…"). This is exactly the person I
+followed through my Milestone 1 trace, and the trace predicted where they'd
+get hurt. Both signals accused them: gpt2 found their careful, common words
+predictable (0.805), and stylometry read their even, short sentences as
+machine-like (0.816). My combining rule only protects people when the two
+signals *disagree*, so it did nothing. The writer most likely to be accused
+is the one with the least room to argue back, and the only thing left for
+them is the appeal.
 
 ---
 

@@ -213,14 +213,34 @@ test and fix are for.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | We think this was probably written by a person. |
+| unsure | 0.35 – 0.65 | We can't tell whether a person or an AI wrote this. That happens a lot, especially with short or plainly written text, and it is not an accusation. Nothing needs to be done. |
+| high-confidence AI | 0.65 – 1.00 | This reads a lot like AI-generated text. Our check can be wrong, especially about simple or plain writing. If you wrote this yourself, you can ask for a person to review it. |
+
+All three are reachable. From the sample run below: `samples/clearly_human.json`
+scored 0.330 → human, `samples/borderline.json` 0.460 → unsure, and
+`samples/clearly_ai.json` 0.753 → AI.
 
 **Why I worded the "unsure" one this way:**
 <!-- It's the hardest of the three. It has to admit uncertainty without
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
+
+<!-- DRAFT: check and rewrite in your own words. -->
+
+The person who reads "unsure" may well have written every word, and my
+calibration run showed plain writers land high on both signals. So the label
+says three things in plain words: we don't know, this is common (especially
+for plain writing, so they don't feel singled out), and it isn't an
+accusation and needs no action. It never mentions a score or a threshold. I
+also put "our check can be wrong" and the review option into the AI label
+itself, because my own data says the AI label will sometimes hit a real
+person, and the appeal (step 7 of my trace) only helps if they know it
+exists.
+
+*Confidence* in the response is how far the combined score leans to whichever
+side it's on: `max(score, 1 − score)`, so 0.5 is a coin flip and 1.0 is
+completely sure.
 
 
 
@@ -238,37 +258,75 @@ test and fix are for.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
+(Port 5050 because macOS AirPlay Receiver holds 5000 on my Mac:
+`PORT=5050 python app.py`.)
+
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
+$ curl -X POST http://127.0.0.1:5050/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d @samples/clearly_ai.json
 ```
 
 ```json
-
+{
+  "combined_score": 0.7533,
+  "confidence": 0.7533,
+  "content_id": "c_04296a2fd24f",
+  "creator_id": "demo_instructor",
+  "guess": "ai",
+  "label": "This reads a lot like AI-generated text. Our check can be wrong, especially about simple or plain writing. If you wrote this yourself, you can ask for a person to review it.",
+  "model_score": 0.7544,
+  "style_score": 0.7523
+}
 ```
 
 **An appeal**
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
+$ curl -X POST http://127.0.0.1:5050/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+  -d '{"content_id": "c_04296a2fd24f", "reasoning": "I wrote this myself for a work newsletter. It is formal because it was for my manager."}'
 ```
 
 ```json
-
+{
+  "content_id": "c_04296a2fd24f",
+  "message": "Thanks. A person will review this. Your original result is kept, and your reasons are saved next to it.",
+  "original_label": "This reads a lot like AI-generated text. Our check can be wrong, especially about simple or plain writing. If you wrote this yourself, you can ask for a person to review it.",
+  "status": "under_review"
+}
 ```
+
+An appeal against a made-up id (`c_doesnotexist`) gets a **404** with "No
+submission with content_id 'c_doesnotexist'. Check it was copied exactly."
+and writes nothing to the log. Appealing the same id twice returns "This is
+already waiting for a person to review it." without adding a second entry.
 
 **What the log shows afterwards**
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+$ curl "http://127.0.0.1:5050/log?limit=4"
 ```
 
 ```json
-
+[
+  {"timestamp": "2026-11-18T05:36:37+00:00", "content_id": "c_04296a2fd24f", "creator_id": "demo_instructor",
+   "guess": "ai", "model_score": 0.7544, "style_score": 0.7523, "combined_score": 0.7533,
+   "label": "This reads a lot like AI-generated text. …", "status": "decided"},
+  {"timestamp": "2026-11-18T05:36:37+00:00", "content_id": "c_74dc024381e1", "creator_id": "demo_instructor",
+   "guess": "unsure", "model_score": 0.3489, "style_score": 0.5714, "combined_score": 0.4602,
+   "label": "We can't tell whether a person or an AI wrote this. …", "status": "decided"},
+  {"timestamp": "2026-11-18T05:36:37+00:00", "content_id": "c_3309d9b702c8", "creator_id": "demo_instructor",
+   "guess": "human", "model_score": 0.4445, "style_score": 0.2147, "combined_score": 0.3296,
+   "label": "We think this was probably written by a person.", "status": "decided"},
+  {"timestamp": "2026-11-18T05:36:37+00:00", "content_id": "c_04296a2fd24f", "creator_id": "demo_instructor",
+   "event": "appeal", "status": "under_review",
+   "reasoning": "I wrote this myself for a work newsletter. It is formal because it was for my manager."}
+]
 ```
+
+The original decision for `c_04296a2fd24f` is still there unchanged, and the
+appeal sits after it with status `under_review`.
 
 ---
 

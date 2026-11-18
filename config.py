@@ -62,6 +62,12 @@ MAX_TEXT_CHARS = 20_000
 WEIGHT_MODEL_SIGNAL = 0.5
 WEIGHT_STYLE_SIGNAL = 0.5
 
+# My rule: if the two signals disagree by more than DISAGREEMENT_GAP, the
+# combined score is capped at DISAGREEMENT_CAP (just under AI_THRESHOLD), so
+# a split can be "unsure" but never "AI". See README "The combining rule".
+DISAGREEMENT_GAP = 0.30
+DISAGREEMENT_CAP = 0.60
+
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
 # Where one label becomes another. Scores run 0.0 (confidently human) to 1.0

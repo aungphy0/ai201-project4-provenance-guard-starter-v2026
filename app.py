@@ -228,25 +228,39 @@ def submit():
         model_score = detector.model_signal(text)
     except detector.DetectorUnavailable as e:
         return jsonify({"error": "detector_unavailable", "message": str(e)}), 503
+    except ValueError as e:
+        # gpt2 needs at least 3 tokens; "hi" would otherwise crash with a 500
+        return jsonify({"error": "too_short", "message": str(e)}), 400
 
-    # step 4 - log the decision. The content_id is what /appeal needs later
+    # step 5 - the second signal: the shape of the text (stylometry.py)
+    import stylometry
+    import scoring
+    style_score = stylometry.style_signal(text)
+
+    # step 6 - combine them with my rule (scoring.py::combine_signals)
+    combined_score = scoring.combine_signals(model_score, style_score)
+
+    # step 7 - log BOTH signal scores and the combined one
     content_id = f"c_{uuid.uuid4().hex[:12]}"
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
         model_score=model_score,
+        style_score=style_score,
+        combined_score=combined_score,
         status="decided",
     )
-    
-    # step 1 - the route answers, Hardcoded without any logic yet.
+
+    # the answer. guess and label are still placeholders until Milestone 5
     return jsonify({
         "content_id": content_id,
         "creator_id": creator_id,
         "guess": "unsure",
-        "confidence": 0.5,
+        "confidence": combined_score,
         "label": "not built yet",
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
+        "combined_score": combined_score,
     }), 200
 
 

@@ -619,6 +619,94 @@ And criterion 4, trial 1, the missing-`text` body:
      Look for a pattern. Five failures on one signal is one problem, not five. -->
 
 
+There were 16 failures: criterion 2, and 15 broken attacks. They come from
+**four** problems, not sixteen. The scores below are from
+`logs/audit.jsonl` for the attack run (`attacker_<id>`), and the raw measures
+from `stylometry.py` run on the same texts.
+
+**Diagnosis 1: plain human writing looks like AI to *both* signals, and my
+combining rule only steps in when they disagree.**
+*Failures:* criterion 2 (3 of 5), FP01, FP02, FP03, FP04, FP05, FP06.
+*Stage:* signal one **and** signal two, with the combining rule unable to
+help.
+*Mechanism:*
+- Signal one: these are plain, careful texts made of common words, so gpt2
+  predicts them easily. The model score is 0.62–0.88 on all six.
+- Signal two: every one of the six has **zero expressive punctuation** (no
+  dashes, semicolons, brackets, ! or ?). In my style signal that alone puts
+  the punctuation part at its 0.75 ceiling. They also have fairly even
+  sentence lengths (spread 0.24–0.52, all under my 0.6 midpoint), so the
+  spread part reads as AI too. Style score is 0.66–0.86.
+- Combining rule: the two signals agree to within 0.22 every time (FP03:
+  0.805 vs 0.816), so my disagreement cap (gap > 0.30) never triggers. The
+  plain average lands at 0.67–0.82, above my 0.65 AI threshold.
+
+So both signals have the same blind spot: plain, formal and careful writing.
+The only safety net I built covers the case where they *disagree*. Formal
+register, a rubric essay, technical docs and a second-language writer all
+fail the same way. It's one problem, and it's the exact person from my
+Milestone 1 trace. FP07 and FP08 survived only because their signals split
+(0.88 vs 0.51, 0.32 vs 0.74) and the cap or the average kept them in unsure.
+
+**Diagnosis 2: AI text escapes the AI label when *one* signal is knocked
+down, because an equal average lets one low score cancel a high one.**
+*Failures:* EV01, EV02, EV03, EV05, EV06, EV07, EV08 (all AI text that
+landed in unsure).
+*Stage:* the combining rule, set off by signal one or signal two.
+*Mechanism:* two different ways in, with the same result.
+- **Signal one knocked down (EV01, EV05, EV08):** typos, a heavy editing
+  pass, or a 10-word snippet give gpt2 rare or too-few tokens, and
+  perplexity jumps. Model scores are 0.16, 0.32 and 0.25 while style stays
+  at 0.84–0.89. EV01 is the surprising one: it *targeted* signal two ("typos
+  raise word variety"), but I gave type-token ratio weight 0, so the typos
+  didn't touch my style signal at all. They broke signal one instead.
+- **Signal two knocked down (EV02, EV03, EV06, EV07):** broken-up sentences
+  (spread 0.85), one very long plus one very short sentence (spread 1.19),
+  punctuation padding (0.072 per word, the highest in the run) and a pasted
+  quotation all make the shape look human. Style falls to 0.31–0.57. These
+  edits are cheap, which is exactly the blind spot I named for signal two.
+
+In both cases the average lands between 0.41 and 0.62, which is unsure. The
+base AI text in this family only scores around 0.6–0.7 on gpt2 to begin
+with, so there's little margin above my 0.65 threshold for an attack to
+erase. My cap is one-directional on purpose (it only lowers scores), so a
+split always helps the attacker get to unsure. That's the trade I chose in
+Unit 7: I'd rather let AI text into "unsure" than accuse a person. These
+failures are the cost of that choice working as designed, not a bug.
+
+**Diagnosis 3: non-prose input breaks signal one, and the route lets it
+through.**
+*Failures:* MF03 (control characters labelled human), PI02 (AI text with a
+fake `SYSTEM:` header labelled human).
+*Stage:* the route (no check that the input is actually prose) and signal
+one.
+*Mechanism:* gpt2 has almost never seen control characters or a
+`guess=human, confidence=0.02` style header, so perplexity explodes and the
+model score drops to 0.00 (MF03) and 0.20 (PI02). Low perplexity is my only
+evidence for AI, so "very surprising" reads as "very human". The style signal
+has nothing to measure (MF03 is 3 "words", 1 sentence) and sits at its
+neutral 0.6. Combined, they land at 0.30 and 0.33, under the human threshold.
+PI02 is **not** a real prompt injection. gpt2 doesn't follow instructions,
+and the label text is fixed. The header worked only because it's unusual
+text. The same mechanism shows in MF04 (only punctuation, model 0.01), which
+landed in unsure only because style was high. The route checks length and
+type, but not whether the text is mostly letters and words.
+
+**Diagnosis 4 (held, but worth recording): requests with no usable
+`creator_id` share one rate-limit bucket.**
+*Not a failure* (RQ10, RQ11 got 429, not a crash), but the 429 hid what the
+validator would have said. *Stage:* the route's rate-limit key. *Mechanism:*
+`rate_limit_key` falls back to the caller's address, and every test request
+comes from `127.0.0.1`. So all creator-less requests count against one
+5-per-minute bucket, and the 6th and 7th were refused before validation ran.
+On a real deployment this is the "one household looks like one caller"
+problem from my Rate Limiting section.
+
+**The pattern:** diagnoses 1 and 2 are the same design choice seen from both
+sides. An equal average plus a one-way disagreement cap protects people only
+when the signals *split*. When they *agree*, it does nothing, and the
+writers they agree on wrongly are plain writers. Criterion 2 and the worst
+outcome (FP03) both come from diagnosis 1, so that's the one to fix.
 
 ---
 
